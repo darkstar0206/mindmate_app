@@ -1,197 +1,164 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  Alert,
-} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { Heart, Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
-import { authService } from '@/services/authService';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { auth } from '../../config/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useRouter } from 'expo-router';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    setIsLoading(true);
     try {
-      await authService.signIn(email, password);
-      router.replace('/(tabs)');
+      await signInWithEmailAndPassword(auth, email, password);
+      router.replace('/'); // Navigate to dashboard
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
-    } finally {
-      setIsLoading(false);
+      let title = 'Account Not Found';
+      let message = 'Account not found. Please sign up.';
+      if (error.code === 'auth/wrong-password') {
+        title = 'Wrong Password';
+        message = 'Incorrect password. Please try again.';
+      } else if (error.code === 'auth/invalid-email') {
+        title = 'Invalid Email';
+        message = 'Invalid email address. Please check and try again.';
+      } else if (error.code === 'auth/too-many-requests') {
+        title = 'Too Many Attempts';
+        message = 'Too many failed attempts. Please wait and try again later.';
+      }
+      Alert.alert(title, message);
     }
-  };
-
-  const handleSignUp = () => {
-    router.push('/auth/register');
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={{ flex: 1 }}>
       <LinearGradient
-        colors={['#8B5CF6', '#EC4899', '#F59E0B']}
+        colors={["#14B8A6", "#8B5CF6", "#EC4899"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.gradient}>
-        
+        style={{ flex: 1 }}>
         <View style={styles.header}>
-          <Heart size={40} color="#FFFFFF" />
-          <Text style={styles.title}>MindMate</Text>
-          <Text style={styles.subtitle}>Welcome back to your wellness journey</Text>
+          <View style={styles.heartIcon}><Text>♡</Text></View>
+          <Text style={styles.title}>Sign In to MindMate</Text>
+          <Text style={styles.subtitle}>Welcome back! Log in to continue your journey</Text>
         </View>
-
-        <View style={styles.formContainer}>
+        <View style={styles.cardContainer}>
           <View style={styles.inputContainer}>
-            <Mail size={20} color="#8B5CF6" />
             <TextInput
               style={styles.input}
               placeholder="Email"
               placeholderTextColor="#9CA3AF"
+              autoCapitalize="none"
+              keyboardType="email-address"
               value={email}
               onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
             />
           </View>
-
           <View style={styles.inputContainer}>
-            <Lock size={20} color="#8B5CF6" />
             <TextInput
               style={styles.input}
               placeholder="Password"
               placeholderTextColor="#9CA3AF"
+              secureTextEntry
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={!showPassword}
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-              {showPassword ? (
-                <EyeOff size={20} color="#9CA3AF" />
-              ) : (
-                <Eye size={20} color="#9CA3AF" />
-              )}
-            </TouchableOpacity>
           </View>
-
-          <TouchableOpacity
-            style={[styles.loginButton, isLoading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}>
-            <LinearGradient
-              colors={['#8B5CF6', '#EC4899']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}>
-              <Text style={styles.buttonText}>
-                {isLoading ? 'Signing In...' : 'Sign In'}
-              </Text>
-            </LinearGradient>
+          <TouchableOpacity style={styles.button} onPress={handleLogin}>
+            <Text style={styles.buttonText}>Sign In</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity style={styles.signUpButton} onPress={handleSignUp}>
-            <Text style={styles.signUpText}>
-              Don't have an account? <Text style={styles.signUpLink}>Sign Up</Text>
-            </Text>
+          <TouchableOpacity style={styles.signupButton} onPress={() => router.push('/auth/register')}>
+            <Text style={styles.signupText}>Don't have an account? <Text style={{color:'#8B5CF6',fontWeight:'bold'}}>Sign Up</Text></Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  gradient: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
   header: {
     alignItems: 'center',
-    marginBottom: 48,
+    marginTop: 60,
+    marginBottom: 24,
+  },
+  heartIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   title: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    marginTop: 16,
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#FFFFFF',
-    textAlign: 'center',
+    color: '#fff',
     opacity: 0.9,
-    marginTop: 8,
+    marginBottom: 18,
+    textAlign: 'center',
   },
-  formContainer: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
+  cardContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
     padding: 24,
+    marginHorizontal: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 6,
+    alignItems: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFC',
     borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
     marginBottom: 16,
+    width: '100%',
+    height: 48,
+  },
+  icon: {
+    marginRight: 8,
   },
   input: {
     flex: 1,
     fontSize: 16,
-    color: '#1F2937',
-    marginLeft: 12,
+    color: '#333',
+    backgroundColor: 'transparent',
   },
-  loginButton: {
+  button: {
+    width: '100%',
+    backgroundColor: '#8B5CF6',
+    paddingVertical: 14,
     borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.7,
-  },
-  buttonGradient: {
-    paddingVertical: 16,
     alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 8,
   },
   buttonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
   },
-  signUpButton: {
-    marginTop: 24,
-    alignItems: 'center',
+  signupButton: {
+    alignSelf: 'center',
+    marginTop: 8,
+    padding: 10,
   },
-  signUpText: {
-    fontSize: 14,
+  signupText: {
+    fontSize: 15,
     color: '#6B7280',
-  },
-  signUpLink: {
-    color: '#8B5CF6',
-    fontWeight: '600',
+    textAlign: 'center',
   },
 });

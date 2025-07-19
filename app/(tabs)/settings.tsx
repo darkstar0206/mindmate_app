@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   Alert,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
   User, 
@@ -25,6 +26,21 @@ import {
 export default function Settings() {
   const [notifications, setNotifications] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  // Get current user info
+  useEffect(() => {
+    const { getCurrentUser, onAuthStateChanged } = require('@/services/authService').authService;
+    setUser(getCurrentUser());
+    const unsubscribe = onAuthStateChanged((u: any) => setUser(u));
+    return () => unsubscribe();
+  }, []);
+  // Save dark mode to AsyncStorage
+  const handleDarkModeChange = async (value: boolean) => {
+    setDarkMode(value);
+    try {
+      await AsyncStorage.setItem('darkMode', JSON.stringify(value));
+    } catch (e) {}
+  };
   const [privateMode, setPrivateMode] = useState(false);
 
   const handleLogout = () => {
@@ -49,13 +65,21 @@ export default function Settings() {
     );
   };
 
-  const SettingItem = ({ 
-    icon, 
-    title, 
-    subtitle, 
-    onPress, 
+  interface SettingItemProps {
+    icon: React.ReactNode;
+    title: string;
+    subtitle?: string;
+    onPress?: () => void;
+    showChevron?: boolean;
+    rightComponent?: React.ReactNode;
+  }
+  const SettingItem: React.FC<SettingItemProps> = ({
+    icon,
+    title,
+    subtitle,
+    onPress,
     showChevron = true,
-    rightComponent 
+    rightComponent
   }) => (
     <TouchableOpacity style={styles.settingItem} onPress={onPress}>
       <View style={styles.settingLeft}>
@@ -71,6 +95,8 @@ export default function Settings() {
     </TouchableOpacity>
   );
 
+  // Navigation for sign up
+  const { push } = require('expo-router');
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -88,14 +114,14 @@ export default function Settings() {
           <View style={styles.sectionCard}>
             <SettingItem
               icon={<User size={20} color="#8B5CF6" />}
-              title="Profile"
-              subtitle="Update your personal information"
+              title={user?.displayName || 'Profile'}
+              subtitle={user?.displayName ? '' : 'Update your personal information'}
               onPress={() => {}}
             />
             <SettingItem
               icon={<Mail size={20} color="#14B8A6" />}
               title="Email"
-              subtitle="alex@example.com"
+              subtitle={user?.email || 'Email not found'}
               onPress={() => {}}
             />
           </View>
@@ -126,7 +152,7 @@ export default function Settings() {
               rightComponent={
                 <Switch
                   value={darkMode}
-                  onValueChange={setDarkMode}
+                  onValueChange={handleDarkModeChange}
                   trackColor={{ false: '#E5E7EB', true: '#8B5CF6' }}
                   thumbColor={darkMode ? '#FFFFFF' : '#9CA3AF'}
                 />
@@ -185,6 +211,9 @@ export default function Settings() {
         </TouchableOpacity>
 
         <View style={styles.bottomSpacing} />
+        <TouchableOpacity style={styles.signupButton} onPress={() => push('/auth/register')}>
+          <Text style={styles.signupText}>Don't have an account? <Text style={{color:'#8B5CF6',fontWeight:'bold'}}>Sign Up</Text></Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -291,6 +320,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     marginLeft: 8,
+  },
+  signupButton: {
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 30,
+    padding: 10,
+  },
+  signupText: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
   },
   bottomSpacing: {
     height: 100,

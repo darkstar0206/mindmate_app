@@ -40,9 +40,14 @@ export default function Register() {
 
     setIsLoading(true);
     try {
-      await authService.signUp(email, password);
+      const user = await authService.signUp(email, password);
+      // Save displayName to Firebase Auth profile
+      if (user) {
+        await authService.updateProfile(user, { displayName: name });
+      }
+      // Navigate directly to dashboard (index.tsx)
       Alert.alert('Success', 'Account created successfully!', [
-        { text: 'OK', onPress: () => router.replace('/(tabs)') }
+        { text: 'OK', onPress: () => router.replace('/') }
       ]);
     } catch (error: any) {
       Alert.alert('Registration Failed', error.message);

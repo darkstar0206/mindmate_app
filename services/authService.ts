@@ -18,6 +18,12 @@ export const authService = {
     }
   },
 
+  async updateProfile(user: User, profile: { displayName?: string }) {
+    // Use updateProfile from firebase/auth
+    const { updateProfile } = await import('firebase/auth');
+    return updateProfile(user, profile);
+  },
+
   async signIn(email: string, password: string) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);

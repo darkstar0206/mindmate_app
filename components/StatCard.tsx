@@ -20,7 +20,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={gradient}
+        colors={Array.isArray(gradient) ? [gradient[0], gradient[1]] : gradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.gradient}>

@@ -4,17 +4,17 @@ import { getFirestore } from 'firebase/firestore';
 
 
 const firebaseConfig = {
-  // Replace with your Firebase configuration
-  apiKey: "your-api-key",
-  authDomain: "your-project.firebaseapp.com",
-  projectId: "your-project-id",
-  storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "your-app-id"
+  apiKey: "AIzaSyCrGRiPuKz1eixvYhZgZQ6nFud-wQqTCCw",
+  authDomain: "mindmadeapp2.firebaseapp.com",
+  projectId: "mindmadeapp2",
+  storageBucket: "mindmadeapp2.firebasestorage.app",
+  messagingSenderId: "173416491670",
+  appId: "1:173416491670:web:c5d8046076a95fba6430b7",
+  measurementId: "G-CGMNEKLJ8X"
 };
 
 const app = initializeApp(firebaseConfig);
-
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// For web only: import { getAnalytics } from 'firebase/analytics';
+// const analytics = getAnalytics(app); // Not used in React Native
 export default app;

@@ -39,7 +39,7 @@ export const SleepSlider: React.FC<SleepSliderProps> = ({
         step={0.5}
         minimumTrackTintColor="#14B8A6"
         maximumTrackTintColor="#E5E7EB"
-        thumbStyle={styles.thumb}
+        // Removed invalid thumbStyle prop
       />
       
       <View style={styles.labels}>

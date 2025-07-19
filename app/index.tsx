@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'expo-router';
+import { auth } from '../config/firebase';
 // @ts-ignore
 import Sentiment from 'sentiment';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, Modal, Switch, TextInput, Alert, Animated } from 'react-native';
@@ -11,6 +13,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import LottieView from 'lottie-react-native';
 const { height, width } = Dimensions.get('window');
 function Dashboard() {
+  const router = useRouter();
+  // Auth state
+  const [user, setUser] = useState<any>(null); // Accepts Firebase User or null
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+      setUser(firebaseUser);
+      if (!firebaseUser) {
+        router.replace('/auth/login');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
   // Weekly/Monthly summary state
   const [weeklySummary, setWeeklySummary] = useState<{avgMood: number, habitPercent: number} | null>(null);
   const [monthlySummary, setMonthlySummary] = useState<{avgMood: number, habitPercent: number} | null>(null);
@@ -267,6 +281,16 @@ function Dashboard() {
   const [logModalVisible, setLogModalVisible] = useState(false);
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
+  // Load dark mode from AsyncStorage
+  useEffect(() => {
+    const loadDarkMode = async () => {
+      try {
+        const value = await AsyncStorage.getItem('darkMode');
+        if (value !== null) setDarkMode(JSON.parse(value));
+      } catch (e) {}
+    };
+    loadDarkMode();
+  }, []);
   const [notifications, setNotifications] = useState(false);
   // Navigation state for tab switching
   const [activeTab, setActiveTab] = useState<'dashboard' | 'trends' | 'challenges' | 'wellnessReport'>('dashboard');
@@ -333,8 +357,12 @@ function Dashboard() {
     }).start();
   }, [monthlyProgress]);
 
-return (
-  <SafeAreaView style={[styles.safeArea, { flex: 1 }]}> 
+  if (!user) {
+    // Optionally render a loading spinner here
+    return null;
+  }
+  return (
+    <SafeAreaView style={[styles.safeArea, { flex: 1 }]}> 
     {/* Full-screen vibrant gradient background */}
     <LinearGradient
       colors={darkMode ? ["#232526", "#414345"] : ["#667eea", "#764ba2", "#f093fb"]}
@@ -565,7 +593,7 @@ return (
                   </LinearGradient>
                   <Sparkles color="#fff" size={20} style={styles.sparkleIcon} />
                 </View>
-                <Text style={[styles.welcomeTitle, darkMode && { color: '#f8ffae' }]}>Welcome back, Alex!</Text>
+                <Text style={[styles.welcomeTitle, darkMode && { color: '#f8ffae' }]}>Welcome back, {user?.displayName || 'User'}!</Text>
                 <Text style={[styles.welcomeSubtitle, darkMode && { color: '#e0e0e0' }]}>You're absolutely crushing it! 🚀</Text>
                 <View style={styles.progressBar}>
                   <LinearGradient
@@ -689,7 +717,7 @@ return (
               end={{ x: 1, y: 1 }}
               style={styles.footer}
             >
-              <Text style={[styles.footerText, darkMode && { color: '#f8ffae' }]}>Keep shining, Alex! 🌈</Text>
+              <Text style={[styles.footerText, darkMode && { color: '#f8ffae' }]}>Keep shining, {user?.displayName || 'User'}! 🌈</Text>
             </LinearGradient>
           </View>
         </ScrollView>
