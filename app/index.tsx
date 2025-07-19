@@ -1,13 +1,89 @@
 import React, { useState, useEffect } from 'react';
+// @ts-ignore
+import Sentiment from 'sentiment';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, Modal, Switch, TextInput, Alert } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Heart, PlusCircle, Settings, BarChart3, Sparkles, Moon, Sun, Brain } from 'lucide-react-native';
+import { Heart, PlusCircle, Settings, BarChart3, Sparkles, Moon, Sun, Brain, Target } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 // import { LineChart, BarChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const { height, width } = Dimensions.get('window');
 function Dashboard() {
+  // Weekly/Monthly summary state
+  const [weeklySummary, setWeeklySummary] = useState<{avgMood: number, habitPercent: number} | null>(null);
+  const [monthlySummary, setMonthlySummary] = useState<{avgMood: number, habitPercent: number} | null>(null);
+  const [streak, setStreak] = useState<number>(0);
+  // Gamification state
+  const [level, setLevel] = useState<number>(1);
+  const [badges, setBadges] = useState<string[]>([]);
+  const [monthlyProgress, setMonthlyProgress] = useState<number>(0);
+  const [challengeBadge, setChallengeBadge] = useState<string | null>(null);
+  // AI-Based Mood Coach: analyze mood/sleep/habits/reflections for tips
+  const [aiCoachTip, setAiCoachTip] = useState<string | null>(null);
+  const [motivationalPrompt, setMotivationalPrompt] = useState<string | null>(null);
+  const sentiment = new Sentiment();
+
+  // Analyze log data for patterns, sentiment, and set a tip and motivational prompt
+  const analyzeForTip = (entries: any[]) => {
+    if (!entries || entries.length === 0) {
+      setAiCoachTip(null);
+      setMotivationalPrompt(null);
+      return;
+    }
+    // Sentiment analysis on last reflection
+    const lastReflection = entries[0]?.reflection || '';
+    const sentimentScore = lastReflection ? sentiment.analyze(lastReflection).score : 0;
+    // Habit streaks
+    const streaks: { [key: string]: number } = {};
+    habitOptions.forEach(h => { streaks[h.key] = 0; });
+    let prevDate: Date | null = null;
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const entryDate = new Date(entry.date);
+      habitOptions.forEach(h => {
+        if (entry.habits && entry.habits.includes(h.key)) {
+          if (!prevDate || (prevDate && (prevDate.getDate() - entryDate.getDate() === 1))) {
+            streaks[h.key]++;
+          }
+        }
+      });
+      prevDate = entryDate;
+    }
+    // Find best streak
+    let bestHabit = '', bestStreak = 0;
+    Object.entries(streaks).forEach(([key, streak]) => {
+      if (streak > bestStreak) {
+        bestStreak = streak;
+        bestHabit = key;
+      }
+    });
+    // Mood trend
+    const moods = entries.map(e => e.mood).filter((m: number) => typeof m === 'number');
+    const avgMood = moods.length ? moods.reduce((a, b) => a + b, 0) / moods.length : 0;
+    // Compose advice
+    if (sentimentScore < -2) {
+      setAiCoachTip('Your recent reflection seems a bit down. Remember, tough days are part of the journey. Try some self-care or talk to a friend!');
+    } else if (sentimentScore > 2) {
+      setAiCoachTip('Your reflection is very positive! Keep spreading those good vibes.');
+    } else if (bestStreak >= 3 && bestHabit) {
+      const habitLabel = habitOptions.find(h => h.key === bestHabit)?.label || bestHabit;
+      setAiCoachTip(`You're ${bestStreak} days into ${habitLabel}! Keep it going 🎯`);
+    } else if (avgMood < 2.5) {
+      setAiCoachTip('Your mood has been low lately. Try a new activity or reach out to someone you trust.');
+    } else {
+      setAiCoachTip('Keep up the great work! Consistency is key to wellness.');
+    }
+    // Motivational prompt
+    const prompts = [
+      'Every day is a fresh start. You got this! 💪',
+      'Small steps every day lead to big changes.',
+      'Celebrate your progress, not just perfection.',
+      'You are stronger than you think.',
+      'Take a deep breath and smile. 😊',
+    ];
+    setMotivationalPrompt(prompts[Math.floor(Math.random() * prompts.length)]);
+  };
   // Stub for missing loadLogEntries function
   // Load log entries and update habits summary/stats
   const loadLogEntries = async () => {
@@ -27,16 +103,16 @@ function Dashboard() {
       }));
       setHabitsSummary(summary);
       // Stats: total, completed, percent, best streak
-      let completed = 0, total = 0, bestStreak = 0, streak = 0;
+      let completed = 0, total = 0, bestStreak = 0, streakCount = 0;
       for (let i = 0; i < last7.length; i++) {
         const c = (last7[i].habits || []).length;
         completed += c;
         total += habitOptions.length;
         if (c === habitOptions.length) {
-          streak++;
-          if (streak > bestStreak) bestStreak = streak;
+          streakCount++;
+          if (streakCount > bestStreak) bestStreak = streakCount;
         } else {
-          streak = 0;
+          streakCount = 0;
         }
       }
       setHabitsStats({
@@ -45,6 +121,73 @@ function Dashboard() {
         percent: total ? Math.round((completed / total) * 100) : 0,
         bestStreak
       });
+      // --- Weekly/Monthly Mood & Habit Summary ---
+      const now1 = new Date();
+      // Weekly
+      const weekAgo = new Date(now1);
+      weekAgo.setDate(now1.getDate() - 6);
+      const weeklyEntries = typedEntries.filter(e => new Date(e.date) >= weekAgo);
+      const weeklyMood = weeklyEntries.map(e => e.mood).filter((m: number) => typeof m === 'number');
+      const weeklyAvgMood = weeklyMood.length ? (weeklyMood.reduce((a, b) => a + b, 0) / weeklyMood.length) : 0;
+      const weeklyHabits = weeklyEntries.reduce((acc, e) => acc + (e.habits?.length || 0), 0);
+      const weeklyHabitPercent = weeklyEntries.length ? Math.round((weeklyHabits / (weeklyEntries.length * habitOptions.length)) * 100) : 0;
+      setWeeklySummary({ avgMood: weeklyAvgMood, habitPercent: weeklyHabitPercent });
+      // Monthly
+      const monthAgo1 = new Date(now1);
+      monthAgo1.setDate(now1.getDate() - 29);
+      const monthlyEntries = typedEntries.filter(e => new Date(e.date) >= monthAgo1);
+      const monthlyMood = monthlyEntries.map(e => e.mood).filter((m: number) => typeof m === 'number');
+      const monthlyAvgMood = monthlyMood.length ? (monthlyMood.reduce((a, b) => a + b, 0) / monthlyMood.length) : 0;
+      const monthlyHabits = monthlyEntries.reduce((acc, e) => acc + (e.habits?.length || 0), 0);
+      const monthlyHabitPercent = monthlyEntries.length ? Math.round((monthlyHabits / (monthlyEntries.length * habitOptions.length)) * 100) : 0;
+      setMonthlySummary({ avgMood: monthlyAvgMood, habitPercent: monthlyHabitPercent });
+      // --- Streak Badge ---
+      // Count consecutive days with any log entry (not just habits)
+      let streakVal = 0;
+      let prevDay = null;
+      for (let i = 0; i < typedEntries.length; i++) {
+        const entryDate = new Date(typedEntries[i].date);
+        if (i === 0) {
+          streakVal = 1;
+        } else {
+          const prevDate = new Date(typedEntries[i - 1].date);
+          const diff = Math.floor((prevDate.getTime() - entryDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (diff === 1) {
+            streakVal++;
+          } else {
+            break;
+          }
+        }
+      }
+      setStreak(streakVal);
+
+      // --- Gamification: Level, Badges, Progress ---
+      // Level: 1 per 10 logs
+      setLevel(Math.max(1, Math.floor(typedEntries.length / 10) + 1));
+      // Badges: streaks, consistency, challenge completion
+      const newBadges: string[] = [];
+      if (streakVal >= 7) newBadges.push('7-Day Streak');
+      if (streakVal >= 30) newBadges.push('30-Day Streak');
+      if (weeklySummary && weeklySummary.habitPercent >= 90) newBadges.push('Weekly Consistency');
+      if (monthlySummary && monthlySummary.habitPercent >= 90) newBadges.push('Monthly Consistency');
+      // Challenge badge (stub: if any challenge completed, award)
+      // You can expand this logic if you track challenge completion
+      if (typedEntries.some(e => e.habits && e.habits.includes('meditation'))) {
+        setChallengeBadge('Meditation Master');
+        newBadges.push('Meditation Master');
+      } else {
+        setChallengeBadge(null);
+      }
+      setBadges(newBadges);
+      // Monthly progress bar: percent of days with any log in last 30 days
+      const now2 = new Date();
+      const monthAgo2 = new Date(now2);
+      monthAgo2.setDate(now2.getDate() - 29);
+      const daysLogged = new Set(typedEntries.filter(e => new Date(e.date) >= monthAgo2).map(e => new Date(e.date).toDateString()));
+      setMonthlyProgress(Math.round((daysLogged.size / 30) * 100));
+
+      // AI Coach: analyze all entries for tips
+      analyzeForTip(typedEntries);
     } catch (e) {
       setHabitsSummary([]);
       setHabitsStats(null);
@@ -65,7 +208,7 @@ function Dashboard() {
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(false);
   // Navigation state for tab switching
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'trends'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'trends' | 'challenges'>('dashboard');
   // Habits graph and summary state
   const [habitsPerDay, setHabitsPerDay] = useState<number[]>([]);
   const [habitsLabels, setHabitsLabels] = useState<string[]>([]);
@@ -132,6 +275,140 @@ function Dashboard() {
       {activeTab === 'dashboard' ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
+      {/* --- Mood & Habit Insights Card --- */}
+      {(weeklySummary || monthlySummary) && (
+        <LinearGradient
+          colors={["#f8ffae", "#43e97b"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            borderRadius: 22,
+            padding: 18,
+            marginBottom: 14,
+            borderWidth: 0,
+            alignItems: 'center',
+            shadowColor: '#43e97b',
+            shadowOpacity: 0.18,
+            shadowRadius: 10,
+            elevation: 4,
+          }}
+        >
+          <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 17, marginBottom: 6, letterSpacing: 0.2 }}>Mood & Habit Insights</Text>
+          {weeklySummary && (
+            <Text style={{ color: '#0ea5e9', fontSize: 15, fontWeight: '600', marginBottom: 2 }}>
+              Weekly Avg Mood: {weeklySummary.avgMood.toFixed(2)} / 5 | Habits: {weeklySummary.habitPercent}%
+            </Text>
+          )}
+          {monthlySummary && (
+            <Text style={{ color: '#0ea5e9', fontSize: 15, fontWeight: '600' }}>
+              Monthly Avg Mood: {monthlySummary.avgMood.toFixed(2)} / 5 | Habits: {monthlySummary.habitPercent}%
+            </Text>
+          )}
+        </LinearGradient>
+      )}
+      {/* --- Gamification: Streak Badge, Level, Badges, Progress --- */}
+      {streak > 1 && (
+        <View style={{
+          alignSelf: 'center',
+          backgroundColor: '#fff',
+          borderRadius: 18,
+          paddingVertical: 6,
+          paddingHorizontal: 18,
+          marginBottom: 10,
+          borderWidth: 2,
+          borderColor: '#43e97b',
+          flexDirection: 'row',
+          alignItems: 'center',
+          shadowColor: '#43e97b',
+          shadowOpacity: 0.15,
+          shadowRadius: 6,
+          elevation: 2,
+        }}>
+          <Sparkles color="#43e97b" size={22} style={{ marginRight: 8 }} />
+          <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 16 }}>🔥 {streak} day streak!</Text>
+        </View>
+      )}
+      {/* Level Display */}
+      <View style={{ alignSelf: 'center', backgroundColor: '#e0ffe9', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 18, marginBottom: 10, borderWidth: 1, borderColor: '#43e97b', flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 15 }}>Level {level}</Text>
+      </View>
+      {/* Badges Display */}
+      {badges.length > 0 && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: 10 }}>
+          {badges.map((badge, idx) => (
+            <View key={idx} style={{ backgroundColor: '#f8ffae', borderRadius: 14, paddingVertical: 4, paddingHorizontal: 12, margin: 4, borderWidth: 1, borderColor: '#43e97b' }}>
+              <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 13 }}>{badge}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+      {/* Challenge Badge */}
+      {challengeBadge && (
+        <View style={{ alignSelf: 'center', backgroundColor: '#c2e9fb', borderRadius: 14, paddingVertical: 4, paddingHorizontal: 12, marginBottom: 10, borderWidth: 1, borderColor: '#43e97b' }}>
+          <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 13 }}>🏅 {challengeBadge}</Text>
+        </View>
+      )}
+      {/* Monthly Progress Bar */}
+      <View style={{ width: '90%', alignSelf: 'center', marginBottom: 16 }}>
+        <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 15, marginBottom: 2 }}>Monthly Goal Progress</Text>
+        <View style={{ height: 14, backgroundColor: '#e0e0e0', borderRadius: 8, overflow: 'hidden', marginBottom: 2 }}>
+          <View style={{ width: `${monthlyProgress}%`, height: '100%', backgroundColor: '#43e97b', borderRadius: 8 }} />
+        </View>
+        <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 13 }}>{monthlyProgress}% of days logged this month</Text>
+      </View>
+      {motivationalPrompt && (
+        <LinearGradient
+          colors={["#fff1f2", "#fbc2eb"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            borderRadius: 22,
+            padding: 18,
+            marginBottom: 14,
+            borderWidth: 0,
+            alignItems: 'center',
+            shadowColor: '#EC4899',
+            shadowOpacity: 0.18,
+            shadowRadius: 10,
+            elevation: 4,
+            flexDirection: 'row',
+            gap: 12,
+          }}
+        >
+          <Sparkles color="#EC4899" size={32} style={{ marginRight: 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#EC4899', fontWeight: 'bold', fontSize: 17, marginBottom: 2, letterSpacing: 0.2 }}>Motivational Prompt</Text>
+            <Text style={{ color: '#7c3aed', fontSize: 16, textAlign: 'left', fontWeight: '600' }}>{motivationalPrompt}</Text>
+          </View>
+        </LinearGradient>
+      )}
+      {/* AI-Based Mood Coach - Improved Card */}
+      {aiCoachTip && (
+        <LinearGradient
+          colors={["#e0ffe9", "#c2e9fb"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
+            borderRadius: 22,
+            padding: 18,
+            marginBottom: 18,
+            borderWidth: 0,
+            alignItems: 'center',
+            shadowColor: '#43e97b',
+            shadowOpacity: 0.18,
+            shadowRadius: 10,
+            elevation: 4,
+            flexDirection: 'row',
+            gap: 12,
+          }}
+        >
+          <Brain color="#43e97b" size={32} style={{ marginRight: 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 17, marginBottom: 2, letterSpacing: 0.2 }}>AI-Based Mood Coach</Text>
+            <Text style={{ color: '#2563eb', fontSize: 16, textAlign: 'left', fontWeight: '600' }}>{aiCoachTip}</Text>
+          </View>
+        </LinearGradient>
+      )}
             {/* Enhanced Header with Multiple Gradients and floating shapes */}
             <LinearGradient
               colors={["#667eea", "#764ba2", "#f093fb"]}
@@ -308,11 +585,18 @@ function Dashboard() {
             </LinearGradient>
           </View>
         </ScrollView>
-      ) : (
+      ) : activeTab === 'trends' ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
             {/* Trends screen is rendered by importing Trends component */}
             {React.createElement(require('./trends').default)}
+          </View>
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.container}>
+            {/* Challenges screen is rendered by importing Challenges component */}
+            {React.createElement(require('./challenges').default)}
           </View>
         </ScrollView>
       )}
@@ -470,6 +754,15 @@ function Dashboard() {
               <PlusCircle color="#667eea" size={24} />
             </View>
             <Text style={styles.tabLabel}>Log Entry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'challenges' && styles.activeTab]}
+            onPress={() => setActiveTab('challenges')}
+          >
+            <View style={styles.inactiveTabBg}>
+              <Target color={activeTab === 'challenges' ? '#43e97b' : '#667eea'} size={24} />
+            </View>
+            <Text style={[styles.tabLabel, activeTab === 'challenges' && styles.activeTabLabel]}>Challenges</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabItem, activeTab === 'trends' && styles.activeTab]}

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Dimensions, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, ScrollView, TouchableOpacity } from 'react-native';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -13,7 +13,7 @@ const habitOptions = [
   { key: 'sleep_early', label: 'Sleep Early' },
 ];
 
-export default function Trends() {
+function Trends() {
   const [moodData, setMoodData] = useState<number[]>([]);
   const [moodLabels, setMoodLabels] = useState<string[]>([]);
   const [sleepData, setSleepData] = useState<number[]>([]);
@@ -22,29 +22,32 @@ export default function Trends() {
   const [habitsLabels, setHabitsLabels] = useState<string[]>([]);
   const [habitsSummary, setHabitsSummary] = useState<{date: string, completed: string[], total: number}[]>([]);
   const [habitsStats, setHabitsStats] = useState<{total: number, completed: number, percent: number, bestStreak: number} | null>(null);
+  const [filter, setFilter] = useState<'week' | 'month'>('week');
+  const [tooltip, setTooltip] = useState<{type: 'mood'|'sleep'|'habits', idx: number, value: number}|null>(null);
 
   const loadLogEntries = async () => {
     try {
       const raw = await AsyncStorage.getItem('logEntries');
       let entries: any[] = raw ? JSON.parse(raw) : [];
       entries = entries.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const last7 = entries.slice(0, 7).reverse();
-      setMoodData(last7.map((e: any) => e.mood + 1));
-      setMoodLabels(last7.map((e: any) => {
+      const range = filter === 'week' ? 7 : 30;
+      const lastN = entries.slice(0, range).reverse();
+      setMoodData(lastN.map((e: any) => e.mood + 1));
+      setMoodLabels(lastN.map((e: any) => {
         const d = new Date(e.date);
         return `${d.getDate()}/${d.getMonth() + 1}`;
       }));
-      setSleepData(last7.map((e: any) => e.sleep));
-      setSleepLabels(last7.map((e: any) => {
+      setSleepData(lastN.map((e: any) => e.sleep));
+      setSleepLabels(lastN.map((e: any) => {
         const d = new Date(e.date);
         return `${d.getDate()}/${d.getMonth() + 1}`;
       }));
-      setHabitsPerDay(last7.map((e: any) => Array.isArray(e.habits) ? e.habits.length : 0));
-      setHabitsLabels(last7.map((e: any) => {
+      setHabitsPerDay(lastN.map((e: any) => Array.isArray(e.habits) ? e.habits.length : 0));
+      setHabitsLabels(lastN.map((e: any) => {
         const d = new Date(e.date);
         return `${d.getDate()}/${d.getMonth() + 1}`;
       }));
-      setHabitsSummary(last7.map((e: any) => {
+      setHabitsSummary(lastN.map((e: any) => {
         const d = new Date(e.date);
         return {
           date: `${d.getDate()}/${d.getMonth() + 1}`,
@@ -52,12 +55,12 @@ export default function Trends() {
           total: habitOptions.length,
         };
       }));
-      let total = last7.length * habitOptions.length;
-      let completed = last7.reduce((sum: number, e: any) => sum + (Array.isArray(e.habits) ? e.habits.length : 0), 0);
+      let total = lastN.length * habitOptions.length;
+      let completed = lastN.reduce((sum: number, e: any) => sum + (Array.isArray(e.habits) ? e.habits.length : 0), 0);
       let percent = total > 0 ? Math.round((completed / total) * 100) : 0;
       let bestStreak = 0, currentStreak = 0;
-      for (let i = 0; i < last7.length; i++) {
-        if (Array.isArray(last7[i].habits) && last7[i].habits.length > 0) {
+      for (let i = 0; i < lastN.length; i++) {
+        if (Array.isArray(lastN[i].habits) && lastN[i].habits.length > 0) {
           currentStreak++;
           if (currentStreak > bestStreak) bestStreak = currentStreak;
         } else {
@@ -75,15 +78,42 @@ export default function Trends() {
 
   useEffect(() => {
     loadLogEntries();
-  }, []);
+    // eslint-disable-next-line
+  }, [filter]);
 
   return (
     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <View style={styles.container}>
         <Text style={styles.screenTitle}>Trends & Graphs</Text>
+        {/* Filter Buttons */}
+        <View style={{ flexDirection: 'row', justifyContent: 'center', marginBottom: 18 }}>
+          <TouchableOpacity
+            style={{
+              backgroundColor: filter === 'week' ? '#43e97b' : '#eee',
+              borderRadius: 16,
+              paddingVertical: 8,
+              paddingHorizontal: 22,
+              marginRight: 8,
+            }}
+            onPress={() => setFilter('week')}
+          >
+            <Text style={{ color: filter === 'week' ? '#fff' : '#43e97b', fontWeight: 'bold', fontSize: 15 }}>Week</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              backgroundColor: filter === 'month' ? '#43e97b' : '#eee',
+              borderRadius: 16,
+              paddingVertical: 8,
+              paddingHorizontal: 22,
+            }}
+            onPress={() => setFilter('month')}
+          >
+            <Text style={{ color: filter === 'month' ? '#fff' : '#43e97b', fontWeight: 'bold', fontSize: 15 }}>Month</Text>
+          </TouchableOpacity>
+        </View>
         {/* Mood Trend Graph */}
         <View style={styles.chartContainer}>
-          <Text style={styles.chartTitle}>Mood Trend (Last 7 Entries)</Text>
+          <Text style={styles.chartTitle}>Mood Trend ({filter === 'week' ? 'Last 7' : 'Last 30'} Entries)</Text>
           {moodData.length > 0 ? (
             <LineChart
               data={{
@@ -122,14 +152,23 @@ export default function Trends() {
               }}
               yLabelsOffset={8}
               segments={5}
+              onDataPointClick={({ index, value }) => setTooltip({ type: 'mood', idx: index, value })}
             />
           ) : (
             <Text style={{ color: '#aaa', marginTop: 24 }}>No mood data yet. Add a log entry!</Text>
           )}
+          {/* Tooltip for Mood */}
+          {tooltip && tooltip.type === 'mood' && moodLabels[tooltip.idx] && (
+            <View style={{ position: 'absolute', top: 40, left: 30 + tooltip.idx * 32, backgroundColor: '#fff', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: '#43e97b', zIndex: 10 }}>
+              <Text style={{ color: '#43e97b', fontWeight: 'bold' }}>Mood: {tooltip.value}</Text>
+              <Text style={{ color: '#2563eb', fontSize: 13 }}>{moodLabels[tooltip.idx]}</Text>
+              <TouchableOpacity onPress={() => setTooltip(null)}><Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>Close</Text></TouchableOpacity>
+            </View>
+          )}
         </View>
         {/* Sleep Trend Graph */}
         <View style={[styles.chartContainer, { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e0e0e0', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8 }] }>
-          <Text style={[styles.chartTitle, { color: '#222' }]}>Sleep Trend (Last 7 Entries)</Text>
+          <Text style={[styles.chartTitle, { color: '#222' }]}>Sleep Trend ({filter === 'week' ? 'Last 7' : 'Last 30'} Entries)</Text>
           {sleepData.length > 0 ? (
             <LineChart
               data={{
@@ -169,9 +208,18 @@ export default function Trends() {
               }}
               yLabelsOffset={8}
               segments={5}
+              onDataPointClick={({ index, value }) => setTooltip({ type: 'sleep', idx: index, value })}
             />
           ) : (
             <Text style={{ color: '#aaa', marginTop: 24 }}>No sleep data yet. Add a log entry!</Text>
+          )}
+          {/* Tooltip for Sleep */}
+          {tooltip && tooltip.type === 'sleep' && sleepLabels[tooltip.idx] && (
+            <View style={{ position: 'absolute', top: 40, left: 30 + tooltip.idx * 32, backgroundColor: '#fff', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: '#43e97b', zIndex: 10 }}>
+              <Text style={{ color: '#43e97b', fontWeight: 'bold' }}>Sleep: {tooltip.value} hrs</Text>
+              <Text style={{ color: '#2563eb', fontSize: 13 }}>{sleepLabels[tooltip.idx]}</Text>
+              <TouchableOpacity onPress={() => setTooltip(null)}><Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>Close</Text></TouchableOpacity>
+            </View>
           )}
         </View>
         {/* Habits Graph */}
@@ -216,13 +264,22 @@ export default function Trends() {
               segments={habitOptions.length}
               showBarTops={true}
               withInnerLines={true}
+              // onDataPointClick is not supported for BarChart in react-native-chart-kit
             />
           ) : (
             <Text style={{ color: '#aaa', marginTop: 12 }}>No habit data yet. Add a log entry!</Text>
           )}
+          {/* Tooltip for Habits */}
+          {tooltip && tooltip.type === 'habits' && habitsLabels[tooltip.idx] && (
+            <View style={{ position: 'absolute', top: 40, left: 30 + tooltip.idx * 32, backgroundColor: '#fff', borderRadius: 10, padding: 8, borderWidth: 1, borderColor: '#43e97b', zIndex: 10 }}>
+              <Text style={{ color: '#43e97b', fontWeight: 'bold' }}>Habits: {tooltip.value}</Text>
+              <Text style={{ color: '#2563eb', fontSize: 13 }}>{habitsLabels[tooltip.idx]}</Text>
+              <TouchableOpacity onPress={() => setTooltip(null)}><Text style={{ color: '#aaa', fontSize: 12, marginTop: 2 }}>Close</Text></TouchableOpacity>
+            </View>
+          )}
           {habitsStats && (
             <Text style={{ color: '#667eea', fontWeight: 'bold', fontSize: 16, marginTop: 8, textAlign: 'center' }}>
-              {`This week: ${habitsStats.completed} / ${habitsStats.total} habits completed (${habitsStats.percent}%)\nBest streak: ${habitsStats.bestStreak} day${habitsStats.bestStreak === 1 ? '' : 's'}`}
+              {`This ${filter}: ${habitsStats.completed} / ${habitsStats.total} habits completed (${habitsStats.percent}%)\nBest streak: ${habitsStats.bestStreak} day${habitsStats.bestStreak === 1 ? '' : 's'}`}
             </Text>
           )}
         </View>
@@ -230,6 +287,8 @@ export default function Trends() {
     </ScrollView>
   );
 }
+
+export default Trends;
 
 const styles = StyleSheet.create({
   container: {
