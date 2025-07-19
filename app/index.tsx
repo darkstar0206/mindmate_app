@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 // @ts-ignore
 import Sentiment from 'sentiment';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, Modal, Switch, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, Modal, Switch, TextInput, Alert, Animated } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Heart, PlusCircle, Settings, BarChart3, Sparkles, Moon, Sun, Brain, Target } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 // import { LineChart, BarChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import LottieView from 'lottie-react-native';
 const { height, width } = Dimensions.get('window');
 function Dashboard() {
   // Weekly/Monthly summary state
@@ -23,6 +24,12 @@ function Dashboard() {
   const [aiCoachTip, setAiCoachTip] = useState<string | null>(null);
   const [motivationalPrompt, setMotivationalPrompt] = useState<string | null>(null);
   const sentiment = new Sentiment();
+
+  // Animation state
+  const progressAnim = useState(new Animated.Value(0))[0];
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [showLottie, setShowLottie] = useState(false);
+  const [lottieType, setLottieType] = useState<'badge'|'streak'|null>(null);
 
   // Analyze log data for patterns, sentiment, and set a tip and motivational prompt
   const analyzeForTip = (entries: any[]) => {
@@ -141,6 +148,46 @@ function Dashboard() {
       const monthlyHabits = monthlyEntries.reduce((acc, e) => acc + (e.habits?.length || 0), 0);
       const monthlyHabitPercent = monthlyEntries.length ? Math.round((monthlyHabits / (monthlyEntries.length * habitOptions.length)) * 100) : 0;
       setMonthlySummary({ avgMood: monthlyAvgMood, habitPercent: monthlyHabitPercent });
+      // --- Personalized Wellness Report ---
+      // Calculate improvement in mood
+      let moodChange = 0;
+      if (weeklyMood.length > 0 && monthlyMood.length > 0) {
+        const prevWeekMood = monthlyMood.slice(0, weeklyMood.length).reduce((a, b) => a + b, 0) / (weeklyMood.length || 1);
+        moodChange = weeklyAvgMood - prevWeekMood;
+      }
+      // Find most completed habit this week
+      let topHabit = '';
+      if (weeklyEntries.length > 0) {
+        const habitCounts: { [key: string]: number } = {};
+        habitOptions.forEach(h => { habitCounts[h.key] = 0; });
+        weeklyEntries.forEach(e => {
+          (e.habits || []).forEach(h => { habitCounts[h] = (habitCounts[h] || 0) + 1; });
+        });
+        const sortedHabits = Object.entries(habitCounts).sort((a, b) => b[1] - a[1]);
+        if (sortedHabits[0][1] > 0) {
+          topHabit = habitOptions.find(h => h.key === sortedHabits[0][0])?.label || sortedHabits[0][0];
+        }
+      }
+      // Compose report
+      let report = '';
+      if (weeklyEntries.length > 0) {
+        report += `This week, your average mood was ${weeklyAvgMood.toFixed(2)} / 5`;
+        if (moodChange !== 0) {
+          report += ` (${moodChange > 0 ? 'improved' : 'declined'} by ${Math.abs(moodChange).toFixed(2)} from last week)`;
+        }
+        report += `.\n`;
+        if (topHabit) {
+          report += `${topHabit} was your most consistent habit. Keep it up!\n`;
+        }
+        if (weeklyHabitPercent >= 80) {
+          report += `Amazing habit consistency (${weeklyHabitPercent}%)!\n`;
+        } else if (weeklyHabitPercent < 40) {
+          report += `Try to complete more habits for a better week.\n`;
+        }
+        report += `Tip: Reflect on what made this week different and set a small goal for next week.`;
+      } else {
+        report = 'Log some entries to see your personalized Wellness Report!';
+      }
       // --- Streak Badge ---
       // Count consecutive days with any log entry (not just habits)
       let streakVal = 0;
@@ -166,8 +213,22 @@ function Dashboard() {
       setLevel(Math.max(1, Math.floor(typedEntries.length / 10) + 1));
       // Badges: streaks, consistency, challenge completion
       const newBadges: string[] = [];
-      if (streakVal >= 7) newBadges.push('7-Day Streak');
-      if (streakVal >= 30) newBadges.push('30-Day Streak');
+      if (streakVal >= 7) {
+        newBadges.push('7-Day Streak');
+        setShowConfetti(true);
+        setShowLottie(true);
+        setLottieType('streak');
+        setTimeout(() => setShowConfetti(false), 2500);
+        setTimeout(() => setShowLottie(false), 2500);
+      }
+      if (streakVal >= 30) {
+        newBadges.push('30-Day Streak');
+        setShowConfetti(true);
+        setShowLottie(true);
+        setLottieType('streak');
+        setTimeout(() => setShowConfetti(false), 2500);
+        setTimeout(() => setShowLottie(false), 2500);
+      }
       if (weeklySummary && weeklySummary.habitPercent >= 90) newBadges.push('Weekly Consistency');
       if (monthlySummary && monthlySummary.habitPercent >= 90) newBadges.push('Monthly Consistency');
       // Challenge badge (stub: if any challenge completed, award)
@@ -208,7 +269,7 @@ function Dashboard() {
   const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(false);
   // Navigation state for tab switching
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'trends' | 'challenges'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'trends' | 'challenges' | 'wellnessReport'>('dashboard');
   // Habits graph and summary state
   const [habitsPerDay, setHabitsPerDay] = useState<number[]>([]);
   const [habitsLabels, setHabitsLabels] = useState<string[]>([]);
@@ -263,22 +324,56 @@ function Dashboard() {
     }
   };
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      {/* Animated background gradient filling the whole screen */}
-      <LinearGradient
-        colors={["#f093fb", "#f5576c", "#4f5bd5", "#43e97b", "#38f9d7"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.absoluteBg, { height }]}
+  useEffect(() => {
+    // Animate progress bar on mount
+    Animated.timing(progressAnim, {
+      toValue: monthlyProgress,
+      duration: 1200,
+      useNativeDriver: false,
+    }).start();
+  }, [monthlyProgress]);
+
+return (
+  <SafeAreaView style={[styles.safeArea, { flex: 1 }]}> 
+    {/* Full-screen vibrant gradient background */}
+    <LinearGradient
+      colors={darkMode ? ["#232526", "#414345"] : ["#667eea", "#764ba2", "#f093fb"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%', zIndex: 0 }}
+    />
+    {/* Confetti and Lottie celebratory moments */}
+    {showConfetti && (
+      <LottieView
+        source={require('../assets/lottie/confetti.json')}
+        autoPlay
+        loop={false}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 200, zIndex: 100 }}
       />
-      {activeTab === 'dashboard' ? (
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.container}>
+    )}
+    {showLottie && lottieType === 'badge' && (
+      <LottieView
+        source={require('../assets/lottie/badge.json')}
+        autoPlay
+        loop={false}
+        style={{ position: 'absolute', top: 80, left: 0, right: 0, height: 120, zIndex: 100 }}
+      />
+    )}
+    {showLottie && lottieType === 'streak' && (
+      <LottieView
+        source={require('../assets/lottie/streak.json')}
+        autoPlay
+        loop={false}
+        style={{ position: 'absolute', top: 80, left: 0, right: 0, height: 120, zIndex: 100 }}
+      />
+    )}
+    {activeTab === 'dashboard' ? (
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={[styles.container, { backgroundColor: 'transparent' }]}> 
       {/* --- Mood & Habit Insights Card --- */}
       {(weeklySummary || monthlySummary) && (
         <LinearGradient
-          colors={["#f8ffae", "#43e97b"]}
+          colors={darkMode ? ["#232526", "#414345"] : ["#f8ffae", "#43e97b"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{
@@ -287,20 +382,20 @@ function Dashboard() {
             marginBottom: 14,
             borderWidth: 0,
             alignItems: 'center',
-            shadowColor: '#43e97b',
+            shadowColor: darkMode ? '#000' : '#43e97b',
             shadowOpacity: 0.18,
             shadowRadius: 10,
             elevation: 4,
           }}
         >
-          <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 17, marginBottom: 6, letterSpacing: 0.2 }}>Mood & Habit Insights</Text>
+          <Text style={{ color: darkMode ? '#f8ffae' : '#2563eb', fontWeight: 'bold', fontSize: 17, marginBottom: 6, letterSpacing: 0.2 }}>Mood & Habit Insights</Text>
           {weeklySummary && (
-            <Text style={{ color: '#0ea5e9', fontSize: 15, fontWeight: '600', marginBottom: 2 }}>
+            <Text style={{ color: darkMode ? '#43e97b' : '#0ea5e9', fontSize: 15, fontWeight: '600', marginBottom: 2 }}>
               Weekly Avg Mood: {weeklySummary.avgMood.toFixed(2)} / 5 | Habits: {weeklySummary.habitPercent}%
             </Text>
           )}
           {monthlySummary && (
-            <Text style={{ color: '#0ea5e9', fontSize: 15, fontWeight: '600' }}>
+            <Text style={{ color: darkMode ? '#43e97b' : '#0ea5e9', fontSize: 15, fontWeight: '600' }}>
               Monthly Avg Mood: {monthlySummary.avgMood.toFixed(2)} / 5 | Habits: {monthlySummary.habitPercent}%
             </Text>
           )}
@@ -308,9 +403,9 @@ function Dashboard() {
       )}
       {/* --- Gamification: Streak Badge, Level, Badges, Progress --- */}
       {streak > 1 && (
-        <View style={{
+        <Animated.View style={{
           alignSelf: 'center',
-          backgroundColor: '#fff',
+          backgroundColor: darkMode ? '#232526' : '#fff',
           borderRadius: 18,
           paddingVertical: 6,
           paddingHorizontal: 18,
@@ -323,42 +418,55 @@ function Dashboard() {
           shadowOpacity: 0.15,
           shadowRadius: 6,
           elevation: 2,
+          transform: [{ scale: showLottie && lottieType === 'streak' ? 1.15 : 1 }],
         }}>
           <Sparkles color="#43e97b" size={22} style={{ marginRight: 8 }} />
           <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 16 }}>🔥 {streak} day streak!</Text>
-        </View>
+        </Animated.View>
       )}
       {/* Level Display */}
-      <View style={{ alignSelf: 'center', backgroundColor: '#e0ffe9', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 18, marginBottom: 10, borderWidth: 1, borderColor: '#43e97b', flexDirection: 'row', alignItems: 'center' }}>
-        <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 15 }}>Level {level}</Text>
+      <View style={{ alignSelf: 'center', backgroundColor: darkMode ? '#232526' : '#e0ffe9', borderRadius: 16, paddingVertical: 6, paddingHorizontal: 18, marginBottom: 10, borderWidth: 1, borderColor: '#43e97b', flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{ color: darkMode ? '#f8ffae' : '#2563eb', fontWeight: 'bold', fontSize: 15 }}>Level {level}</Text>
       </View>
       {/* Badges Display */}
       {badges.length > 0 && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginBottom: 10 }}>
           {badges.map((badge, idx) => (
-            <View key={idx} style={{ backgroundColor: '#f8ffae', borderRadius: 14, paddingVertical: 4, paddingHorizontal: 12, margin: 4, borderWidth: 1, borderColor: '#43e97b' }}>
+            <Animated.View key={idx} style={{
+              backgroundColor: darkMode ? '#414345' : '#f8ffae',
+              borderRadius: 14,
+              paddingVertical: 4,
+              paddingHorizontal: 12,
+              margin: 4,
+              borderWidth: 1,
+              borderColor: '#43e97b',
+              transform: [{ scale: showLottie && lottieType === 'badge' ? 1.15 : 1 }],
+              shadowColor: showLottie && lottieType === 'badge' ? '#43e97b' : 'transparent',
+              shadowOpacity: showLottie && lottieType === 'badge' ? 0.5 : 0,
+              shadowRadius: showLottie && lottieType === 'badge' ? 10 : 0,
+            }}>
               <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 13 }}>{badge}</Text>
-            </View>
+            </Animated.View>
           ))}
         </View>
       )}
       {/* Challenge Badge */}
       {challengeBadge && (
-        <View style={{ alignSelf: 'center', backgroundColor: '#c2e9fb', borderRadius: 14, paddingVertical: 4, paddingHorizontal: 12, marginBottom: 10, borderWidth: 1, borderColor: '#43e97b' }}>
+        <View style={{ alignSelf: 'center', backgroundColor: darkMode ? '#232526' : '#c2e9fb', borderRadius: 14, paddingVertical: 4, paddingHorizontal: 12, marginBottom: 10, borderWidth: 1, borderColor: '#43e97b' }}>
           <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 13 }}>🏅 {challengeBadge}</Text>
         </View>
       )}
       {/* Monthly Progress Bar */}
       <View style={{ width: '90%', alignSelf: 'center', marginBottom: 16 }}>
-        <Text style={{ color: '#2563eb', fontWeight: 'bold', fontSize: 15, marginBottom: 2 }}>Monthly Goal Progress</Text>
-        <View style={{ height: 14, backgroundColor: '#e0e0e0', borderRadius: 8, overflow: 'hidden', marginBottom: 2 }}>
-          <View style={{ width: `${monthlyProgress}%`, height: '100%', backgroundColor: '#43e97b', borderRadius: 8 }} />
+        <Text style={{ color: darkMode ? '#f8ffae' : '#2563eb', fontWeight: 'bold', fontSize: 15, marginBottom: 2 }}>Monthly Goal Progress</Text>
+        <View style={{ height: 14, backgroundColor: darkMode ? '#232526' : '#e0e0e0', borderRadius: 8, overflow: 'hidden', marginBottom: 2 }}>
+          <Animated.View style={{ width: progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }), height: '100%', backgroundColor: '#43e97b', borderRadius: 8 }} />
         </View>
         <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 13 }}>{monthlyProgress}% of days logged this month</Text>
       </View>
       {motivationalPrompt && (
         <LinearGradient
-          colors={["#fff1f2", "#fbc2eb"]}
+          colors={darkMode ? ["#232526", "#414345"] : ["#fff1f2", "#fbc2eb"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{
@@ -367,7 +475,7 @@ function Dashboard() {
             marginBottom: 14,
             borderWidth: 0,
             alignItems: 'center',
-            shadowColor: '#EC4899',
+            shadowColor: darkMode ? '#000' : '#EC4899',
             shadowOpacity: 0.18,
             shadowRadius: 10,
             elevation: 4,
@@ -375,17 +483,17 @@ function Dashboard() {
             gap: 12,
           }}
         >
-          <Sparkles color="#EC4899" size={32} style={{ marginRight: 10 }} />
+          <Sparkles color={darkMode ? '#f8ffae' : '#EC4899'} size={32} style={{ marginRight: 10 }} />
           <View style={{ flex: 1 }}>
-            <Text style={{ color: '#EC4899', fontWeight: 'bold', fontSize: 17, marginBottom: 2, letterSpacing: 0.2 }}>Motivational Prompt</Text>
-            <Text style={{ color: '#7c3aed', fontSize: 16, textAlign: 'left', fontWeight: '600' }}>{motivationalPrompt}</Text>
+            <Text style={{ color: darkMode ? '#f8ffae' : '#EC4899', fontWeight: 'bold', fontSize: 17, marginBottom: 2, letterSpacing: 0.2 }}>Motivational Prompt</Text>
+            <Text style={{ color: darkMode ? '#43e97b' : '#7c3aed', fontSize: 16, textAlign: 'left', fontWeight: '600' }}>{motivationalPrompt}</Text>
           </View>
         </LinearGradient>
       )}
       {/* AI-Based Mood Coach - Improved Card */}
       {aiCoachTip && (
         <LinearGradient
-          colors={["#e0ffe9", "#c2e9fb"]}
+          colors={darkMode ? ["#232526", "#414345"] : ["#e0ffe9", "#c2e9fb"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={{
@@ -394,7 +502,7 @@ function Dashboard() {
             marginBottom: 18,
             borderWidth: 0,
             alignItems: 'center',
-            shadowColor: '#43e97b',
+            shadowColor: darkMode ? '#000' : '#43e97b',
             shadowOpacity: 0.18,
             shadowRadius: 10,
             elevation: 4,
@@ -402,19 +510,19 @@ function Dashboard() {
             gap: 12,
           }}
         >
-          <Brain color="#43e97b" size={32} style={{ marginRight: 10 }} />
+          <Brain color={darkMode ? '#43e97b' : '#43e97b'} size={32} style={{ marginRight: 10 }} />
           <View style={{ flex: 1 }}>
-            <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 17, marginBottom: 2, letterSpacing: 0.2 }}>AI-Based Mood Coach</Text>
-            <Text style={{ color: '#2563eb', fontSize: 16, textAlign: 'left', fontWeight: '600' }}>{aiCoachTip}</Text>
+            <Text style={{ color: darkMode ? '#f8ffae' : '#43e97b', fontWeight: 'bold', fontSize: 17, marginBottom: 2, letterSpacing: 0.2 }}>AI-Based Mood Coach</Text>
+            <Text style={{ color: darkMode ? '#43e97b' : '#2563eb', fontSize: 16, textAlign: 'left', fontWeight: '600' }}>{aiCoachTip}</Text>
           </View>
         </LinearGradient>
       )}
             {/* Enhanced Header with Multiple Gradients and floating shapes */}
             <LinearGradient
-              colors={["#667eea", "#764ba2", "#f093fb"]}
+              colors={darkMode ? ["#232526", "#414345"] : ["#667eea", "#764ba2", "#f093fb"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
-              style={styles.gradientHeader}
+              style={[styles.gradientHeader, darkMode && { borderBottomColor: '#232526' }]}
             >
               <View style={styles.headerContent}>
                 <View style={styles.logoContainer}>
@@ -442,12 +550,12 @@ function Dashboard() {
 
             {/* Enhanced Welcome Card with Glass Effect */}
             <LinearGradient
-              colors={["#ff9a9e", "#fecfef", "#ffeaa7"]}
+              colors={darkMode ? ["#232526", "#414345"] : ["#ff9a9e", "#fecfef", "#ffeaa7"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.welcomeCard}
             >
-              <View style={styles.glassOverlay}>
+              <View style={[styles.glassOverlay, darkMode && { backgroundColor: 'rgba(36,36,40,0.7)' }]}> 
                 <View style={styles.welcomeIconContainer}>
                   <LinearGradient
                     colors={["#ff6b6b", "#ee5a24"]}
@@ -457,8 +565,8 @@ function Dashboard() {
                   </LinearGradient>
                   <Sparkles color="#fff" size={20} style={styles.sparkleIcon} />
                 </View>
-                <Text style={styles.welcomeTitle}>Welcome back, Alex!</Text>
-                <Text style={styles.welcomeSubtitle}>You're absolutely crushing it! 🚀</Text>
+                <Text style={[styles.welcomeTitle, darkMode && { color: '#f8ffae' }]}>Welcome back, Alex!</Text>
+                <Text style={[styles.welcomeSubtitle, darkMode && { color: '#e0e0e0' }]}>You're absolutely crushing it! 🚀</Text>
                 <View style={styles.progressBar}>
                   <LinearGradient
                     colors={["#00b894", "#00cec9"]}
@@ -467,25 +575,25 @@ function Dashboard() {
                     style={styles.progressFill}
                   />
                 </View>
-                <Text style={styles.progressText}>Weekly Progress: 85%</Text>
+                <Text style={[styles.progressText, darkMode && { color: '#f8ffae' }]}>Weekly Progress: 85%</Text>
               </View>
             </LinearGradient>
 
             {/* Floating Action Bar for quick settings and actions - moved to top and made more visible */}
             <View style={styles.actionBarWrapper}>
               <LinearGradient
-                colors={["#667eea", "#43e97b"]}
+                colors={darkMode ? ["#232526", "#414345"] : ["#667eea", "#43e97b"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
-                style={styles.actionBar}
+                style={[styles.actionBar, darkMode && { borderColor: '#232526' }]}
               >
                 <TouchableOpacity style={styles.actionBarItem} onPress={() => setSettingsVisible(true)}>
                   <Settings color="#fff" size={28} />
                   <Text style={styles.actionBarLabel}>Settings</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBarItem}>
-                  <Sun color="#fff" size={28} />
-                  <Text style={styles.actionBarLabel}>Theme</Text>
+                <TouchableOpacity style={styles.actionBarItem} onPress={() => setDarkMode(d => !d)}>
+                  <Sun color={darkMode ? '#f8ffae' : '#fff'} size={28} />
+                  <Text style={[styles.actionBarLabel, darkMode && { color: '#f8ffae' }]}>Theme</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.actionBarItem}>
                   <Sparkles color="#fff" size={28} />
@@ -495,20 +603,20 @@ function Dashboard() {
             </View>
 
             {/* Habits Summary Only (no graphs) */}
-            <View style={styles.chartContainer}>
-              <Text style={styles.chartTitle}>Habits Summary (Last 7 Entries)</Text>
+            <View style={[styles.chartContainer, darkMode && { backgroundColor: 'rgba(36,36,40,0.85)' }]}> 
+              <Text style={[styles.chartTitle, darkMode && { color: '#f8ffae' }]}>Habits Summary (Last 7 Entries)</Text>
               {habitsStats && (
-                <Text style={{ color: '#667eea', fontWeight: 'bold', fontSize: 16, marginBottom: 6, textAlign: 'center' }}>
+                <Text style={{ color: darkMode ? '#43e97b' : '#667eea', fontWeight: 'bold', fontSize: 16, marginBottom: 6, textAlign: 'center' }}>
                   {`This week: ${habitsStats.completed} / ${habitsStats.total} habits completed (${habitsStats.percent}%)\nBest streak: ${habitsStats.bestStreak} day${habitsStats.bestStreak === 1 ? '' : 's'}`}
                 </Text>
               )}
               {habitsSummary.length > 0 ? (
                 <View style={{width: '100%', marginBottom: 12}}>
                   {habitsSummary.map((h, idx) => (
-                    <Text key={idx} style={{color: '#43e97b', fontWeight: '600', fontSize: 15, marginBottom: 2}}>
+                    <Text key={idx} style={{color: darkMode ? '#f8ffae' : '#43e97b', fontWeight: '600', fontSize: 15, marginBottom: 2}}>
                       {h.date}: {h.completed.length} / {h.total} habits completed
                       {h.completed.length > 0 && (
-                        <Text style={{color: '#667eea', fontWeight: '400', fontSize: 14}}>  [
+                        <Text style={{color: darkMode ? '#43e97b' : '#667eea', fontWeight: '400', fontSize: 14}}>  [
                           {h.completed.map((key, i) => {
                             const habit = habitOptions.find(opt => opt.key === key);
                             return habit ? habit.label + (i < h.completed.length - 1 ? ', ' : '') : '';
@@ -519,7 +627,7 @@ function Dashboard() {
                   ))}
                 </View>
               ) : (
-                <Text style={{ color: '#aaa', marginTop: 12 }}>No habit data yet. Add a log entry!</Text>
+                <Text style={{ color: darkMode ? '#aaa' : '#aaa', marginTop: 12 }}>No habit data yet. Add a log entry!</Text>
               )}
             </View>
 
@@ -527,7 +635,7 @@ function Dashboard() {
             <View style={styles.statsGrid}>
               {/* Total Entries Card */}
               <LinearGradient
-                colors={["#43e97b", "#38f9d7", "#f093fb"]}
+                colors={darkMode ? ["#232526", "#414345"] : ["#43e97b", "#38f9d7", "#f093fb"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.statCard}
@@ -535,15 +643,15 @@ function Dashboard() {
                 <View style={styles.statIconContainer}>
                   <Text style={styles.statIcon}>📋</Text>
                 </View>
-                <Text style={styles.statValue}>23</Text>
-                <Text style={styles.statUnit}>logs</Text>
-                <Text style={styles.statLabel}>Total Entries</Text>
+                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>23</Text>
+                <Text style={[styles.statUnit, darkMode && { color: '#f8ffae' }]}>logs</Text>
+                <Text style={[styles.statLabel, darkMode && { color: '#f8ffae' }]}>Total Entries</Text>
                 <View style={styles.cardDecor} />
               </LinearGradient>
 
               {/* Mood Card with Emoji Theme */}
               <LinearGradient
-                colors={["#00b894", "#00cec9", "#55efc4"]}
+                colors={darkMode ? ["#232526", "#414345"] : ["#00b894", "#00cec9", "#55efc4"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.statCard}
@@ -551,15 +659,15 @@ function Dashboard() {
                 <View style={styles.statIconContainer}>
                   <Text style={styles.statIcon}>😊</Text>
                 </View>
-                <Text style={styles.statValue}>4.2</Text>
-                <Text style={styles.statUnit}>/5</Text>
-                <Text style={styles.statLabel}>Avg Mood</Text>
+                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>4.2</Text>
+                <Text style={[styles.statUnit, darkMode && { color: '#f8ffae' }]}>/5</Text>
+                <Text style={[styles.statLabel, darkMode && { color: '#f8ffae' }]}>Avg Mood</Text>
                 <View style={styles.cardDecor} />
               </LinearGradient>
 
               {/* Sleep Card with Moon Theme */}
               <LinearGradient
-                colors={["#fdcb6e", "#e17055", "#d63031"]}
+                colors={darkMode ? ["#232526", "#414345"] : ["#fdcb6e", "#e17055", "#d63031"]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.statCard}
@@ -567,21 +675,21 @@ function Dashboard() {
                 <View style={styles.statIconContainer}>
                   <Moon color="#fff" size={24} />
                 </View>
-                <Text style={styles.statValue}>7.5</Text>
-                <Text style={styles.statUnit}>hrs</Text>
-                <Text style={styles.statLabel}>Avg Sleep</Text>
+                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>7.5</Text>
+                <Text style={[styles.statUnit, darkMode && { color: '#f8ffae' }]}>hrs</Text>
+                <Text style={[styles.statLabel, darkMode && { color: '#f8ffae' }]}>Avg Sleep</Text>
                 <View style={styles.cardDecor} />
               </LinearGradient>
             </View>
 
             {/* Vibrant Footer Gradient filling the bottom */}
             <LinearGradient
-              colors={["#43e97b", "#38f9d7", "#f093fb"]}
+              colors={darkMode ? ["#232526", "#414345"] : ["#43e97b", "#38f9d7", "#f093fb"]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.footer}
             >
-              <Text style={styles.footerText}>Keep shining, Alex! 🌈</Text>
+              <Text style={[styles.footerText, darkMode && { color: '#f8ffae' }]}>Keep shining, Alex! 🌈</Text>
             </LinearGradient>
           </View>
         </ScrollView>
@@ -592,14 +700,22 @@ function Dashboard() {
             {React.createElement(require('./trends').default)}
           </View>
         </ScrollView>
-      ) : (
+      ) : activeTab === 'challenges' ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.container}>
             {/* Challenges screen is rendered by importing Challenges component */}
             {React.createElement(require('./challenges').default)}
           </View>
         </ScrollView>
-      )}
+      ) : activeTab === 'wellnessReport' ? (
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.container}>
+            {/* Wellness Report screen */}
+            {React.createElement(require('./wellnessReport').default, { darkMode })}
+          </View>
+        </ScrollView>
+      ) : null}
+      
 
       {/* Log Entry Modal - always rendered at root */}
       <Modal
@@ -608,10 +724,10 @@ function Dashboard() {
         transparent={true}
         onRequestClose={() => setLogModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Log Entry</Text>
-            <Text style={{ marginBottom: 12, color: '#667eea', fontWeight: '600', fontSize: 16 }}>
+        <View style={[styles.modalOverlay, darkMode && { backgroundColor: 'rgba(24,24,27,0.7)' }]}> 
+          <View style={[styles.modalContent, darkMode && { backgroundColor: '#232526' }]}> 
+            <Text style={[styles.modalTitle, darkMode && { color: '#f8ffae' }]}>Log Entry</Text>
+            <Text style={{ marginBottom: 12, color: darkMode ? '#43e97b' : '#667eea', fontWeight: '600', fontSize: 16 }}>
               How are you feeling today?
             </Text>
             <View style={styles.moodRow}>
@@ -621,16 +737,17 @@ function Dashboard() {
                   style={[
                     styles.moodOption,
                     selectedMood === idx && styles.moodOptionSelected,
+                    darkMode && { backgroundColor: 'rgba(67,233,123,0.07)', borderColor: selectedMood === idx ? '#43e97b' : 'transparent' }
                   ]}
                   onPress={() => setSelectedMood(idx)}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.moodEmoji}>{mood.emoji}</Text>
-                  <Text style={styles.moodLabel}>{mood.label}</Text>
+                  <Text style={[styles.moodEmoji, darkMode && { color: '#43e97b' }]}>{mood.emoji}</Text>
+                  <Text style={[styles.moodLabel, darkMode && { color: '#43e97b' }]}>{mood.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={{ marginBottom: 6, color: '#667eea', fontWeight: '600', fontSize: 16 }}>
+            <Text style={{ marginBottom: 6, color: darkMode ? '#43e97b' : '#667eea', fontWeight: '600', fontSize: 16 }}>
               How many hours did you sleep?
             </Text>
             <View style={styles.sleepRow}>
@@ -641,14 +758,14 @@ function Dashboard() {
                 step={0.5}
                 value={sleepHours}
                 onValueChange={setSleepHours}
-                minimumTrackTintColor="#667eea"
-                maximumTrackTintColor="#ccc"
-                thumbTintColor="#43e97b"
+                minimumTrackTintColor={darkMode ? '#43e97b' : '#667eea'}
+                maximumTrackTintColor={darkMode ? '#232526' : '#ccc'}
+                thumbTintColor={darkMode ? '#f8ffae' : '#43e97b'}
               />
-              <Text style={styles.sleepValue}>{sleepHours} hrs</Text>
+              <Text style={[styles.sleepValue, darkMode && { color: '#43e97b' }]}>{sleepHours} hrs</Text>
             </View>
             {/* Habits checklist */}
-            <Text style={{ marginBottom: 6, color: '#667eea', fontWeight: '600', fontSize: 16 }}>
+            <Text style={{ marginBottom: 6, color: darkMode ? '#43e97b' : '#667eea', fontWeight: '600', fontSize: 16 }}>
               Which habits did you complete today?
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12, width: '100%' }}>
@@ -656,7 +773,7 @@ function Dashboard() {
                 <TouchableOpacity
                   key={habit.key}
                   style={{
-                    backgroundColor: selectedHabits.includes(habit.key) ? '#43e97b' : '#eee',
+                    backgroundColor: selectedHabits.includes(habit.key) ? (darkMode ? '#43e97b' : '#43e97b') : (darkMode ? '#232526' : '#eee'),
                     borderRadius: 16,
                     paddingVertical: 6,
                     paddingHorizontal: 14,
@@ -670,24 +787,24 @@ function Dashboard() {
                     );
                   }}
                 >
-                  <Text style={{ color: selectedHabits.includes(habit.key) ? '#fff' : '#667eea', fontWeight: '600' }}>{habit.label}</Text>
+                  <Text style={{ color: selectedHabits.includes(habit.key) ? '#fff' : (darkMode ? '#43e97b' : '#667eea'), fontWeight: '600' }}>{habit.label}</Text>
                 </TouchableOpacity>
               ))}
             </View>
             <TextInput
-              style={styles.logInput}
+              style={[styles.logInput, darkMode && { backgroundColor: '#232526', color: '#f8ffae', borderColor: '#414345' }]}
               placeholder="Type something..."
-              placeholderTextColor="#aaa"
+              placeholderTextColor={darkMode ? '#aaa' : '#aaa'}
               value={reflection}
               onChangeText={setReflection}
               multiline
             />
             <View style={styles.modalBtnRow}>
-              <TouchableOpacity style={styles.okModalBtn} onPress={handleSaveLogEntry}>
-                <Text style={styles.okModalText}>OK</Text>
+              <TouchableOpacity style={[styles.okModalBtn, darkMode && { backgroundColor: '#43e97b' }]} onPress={handleSaveLogEntry}>
+                <Text style={[styles.okModalText, darkMode && { color: '#18181b' }]}>OK</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.closeModalBtn} onPress={() => setLogModalVisible(false)}>
-                <Text style={styles.closeModalText}>Close</Text>
+              <TouchableOpacity style={[styles.closeModalBtn, darkMode && { backgroundColor: '#414345' }]} onPress={() => setLogModalVisible(false)}>
+                <Text style={[styles.closeModalText, darkMode && { color: '#f8ffae' }]}>Close</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -722,9 +839,54 @@ function Dashboard() {
                 trackColor={{ false: '#ccc', true: '#43e97b' }}
               />
             </View>
-            <TouchableOpacity style={styles.clearCacheBtn} onPress={handleClearCache}>
-              <Text style={styles.clearCacheText}>Clear Cache</Text>
-            </TouchableOpacity>
+            {/* Minimal Settings List */}
+            <View style={{ width: '100%', marginTop: 8 }}>
+              <TouchableOpacity style={styles.settingListItem} onPress={() => {
+                Alert.alert('Thank you!', 'Redirecting to app store for rating...');
+              }}>
+                <Text style={styles.settingListText}>Give Us a Rating ⭐</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingListItem} onPress={() => {
+                Alert.alert('FAQ', 'Q: How do I use MindMate?\nA: Log your mood, sleep, and habits daily!\n\nQ: Is my data private?\nA: Yes, your data stays on your device.');
+              }}>
+                <Text style={styles.settingListText}>FAQ ❓</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingListItem} onPress={() => {
+                Alert.alert('Contact Us', 'Need help or want to reach out?\nEmail: support@mindmate.app\nWe usually reply within 24 hours!');
+              }}>
+                <Text style={styles.settingListText}>Support / Contact Us 📧</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingListItem} onPress={handleClearCache}>
+                <Text style={styles.settingListText}>Clear Cache</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingListItem} onPress={() => {
+                Alert.alert(
+                  'Feedback',
+                  'We value your feedback!\n\nTo send feedback, email: feedback@mindmate.app',
+                  [
+                    { text: 'Email Us', onPress: () => {
+                        // Try to open email client
+                        try {
+                          // @ts-ignore
+                          require('react-native').Linking.openURL('mailto:feedback@mindmate.app?subject=MindMate%20Feedback');
+                        } catch {}
+                      }
+                    },
+                    { text: 'Cancel', style: 'cancel' }
+                  ]
+                );
+              }}>
+                <Text style={styles.settingListText}>Feedback 📝</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.settingListItem} onPress={() => {
+                Alert.alert(
+                  'About MindMate',
+                  'MindMate v2.0.0\n\nYour wellness journey companion.\n\nCredits:\n- Design & Development: Uday Varma\n- Special thanks: MindMate Community\n\nMindMate helps you track your mood, sleep, and habits, offering personalized tips and motivation. Your data stays private on your device.'
+                );
+              }}>
+                <Text style={styles.settingListText}>About ℹ️</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity style={styles.closeModalBtn} onPress={() => setSettingsVisible(false)}>
               <Text style={styles.closeModalText}>Close</Text>
             </TouchableOpacity>
@@ -773,6 +935,15 @@ function Dashboard() {
             </View>
             <Text style={[styles.tabLabel, activeTab === 'trends' && styles.activeTabLabel]}>Trends</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'wellnessReport' && styles.activeTab]}
+            onPress={() => setActiveTab('wellnessReport')}
+          >
+            <View style={styles.inactiveTabBg}>
+              <Sparkles color={activeTab === 'wellnessReport' ? '#43e97b' : '#667eea'} size={24} />
+            </View>
+            <Text style={[styles.tabLabel, activeTab === 'wellnessReport' && styles.activeTabLabel]}>Wellness Report</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.tabItem} onPress={() => setSettingsVisible(true)}>
             <View style={styles.inactiveTabBg}>
               <Settings color="#667eea" size={24} />
@@ -786,6 +957,18 @@ function Dashboard() {
 }
 
 const styles = StyleSheet.create({
+  settingListItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    width: '100%',
+  },
+  settingListText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
   chartContainer: {
     backgroundColor: 'rgba(255,255,255,0.85)',
     borderRadius: 20,
