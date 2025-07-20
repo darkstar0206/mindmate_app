@@ -49,10 +49,12 @@
     "react-native-vector-icons": "^10.2.0",
     "react-native-web": "^0.20.0",
     "react-native-webview": "13.13.5",
-    "sentiment": "^5.0.2"
+    "sentiment": "^5.0.2",
+    "expo-updates": "~0.28.17"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@tsconfig/react-native": "^3.0.6",
     "@types/react": "~19.0.10",
     "typescript": "~5.8.3"
   }

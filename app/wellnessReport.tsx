@@ -123,16 +123,7 @@ function WellnessReportScreen({ darkMode }: { darkMode: boolean }) {
             </View>
             <Text style={{ color: '#43e97b', fontWeight: 'bold', fontSize: 13, textAlign: 'center' }}>{weeklyPercent}% completed</Text>
           </View>
-          <TouchableOpacity
-            style={{ marginTop: 8, backgroundColor: darkMode ? '#414345' : '#43e97b', borderRadius: 12, paddingVertical: 6, paddingHorizontal: 18 }}
-            onPress={() => {
-              setWellnessReport(undoWellnessReport);
-              setUndoWellnessReport(null);
-            }}
-            disabled={!undoWellnessReport}
-          >
-            <Text style={{ color: darkMode ? '#f8ffae' : '#fff', fontWeight: 'bold', fontSize: 14 }}>Undo</Text>
-          </TouchableOpacity>
+          {/* Undo button removed as requested */}
         </LinearGradient>
         {/* Motivational Quote */}
         <View style={{ marginTop: 32, alignItems: 'center', width: '90%' }}>
