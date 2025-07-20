@@ -11,8 +11,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 // import { LineChart, BarChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import LottieView from 'lottie-react-native';
+import ConfettiAnimation from '../components/ConfettiAnimation';
+import { getRandomQuote } from '../utils/motivationalQuotes';
 const { height, width } = Dimensions.get('window');
+
 function Dashboard() {
+  // --- Stats for dashboard cards ---
+  const [totalEntries, setTotalEntries] = useState(0);
+  const [avgMood, setAvgMood] = useState(0);
+  const [avgSleep, setAvgSleep] = useState(0);
   const router = useRouter();
   // Auth state
   const [user, setUser] = useState<any>(null); // Accepts Firebase User or null
@@ -44,6 +51,17 @@ function Dashboard() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [showLottie, setShowLottie] = useState(false);
   const [lottieType, setLottieType] = useState<'badge'|'streak'|null>(null);
+
+  // Boost modal state
+  const [boostModalVisible, setBoostModalVisible] = useState(false);
+  const [boostQuote, setBoostQuote] = useState('');
+
+  const handleBoost = () => {
+    setBoostQuote(getRandomQuote());
+    setBoostModalVisible(true);
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 2500);
+  };
 
   // Analyze log data for patterns, sentiment, and set a tip and motivational prompt
   const analyzeForTip = (entries: any[]) => {
@@ -162,6 +180,12 @@ function Dashboard() {
       const monthlyHabits = monthlyEntries.reduce((acc, e) => acc + (e.habits?.length || 0), 0);
       const monthlyHabitPercent = monthlyEntries.length ? Math.round((monthlyHabits / (monthlyEntries.length * habitOptions.length)) * 100) : 0;
       setMonthlySummary({ avgMood: monthlyAvgMood, habitPercent: monthlyHabitPercent });
+      // --- Dashboard Stats ---
+      setTotalEntries(Array.isArray(typedEntries) ? typedEntries.length : 0);
+      const allMoods = Array.isArray(typedEntries) ? typedEntries.map(e => e.mood).filter((m) => typeof m === 'number') : [];
+      setAvgMood(allMoods.length ? allMoods.reduce((a, b) => a + b, 0) / allMoods.length : 0);
+      const allSleep = Array.isArray(typedEntries) ? typedEntries.map(e => e.sleep).filter((s) => typeof s === 'number') : [];
+      setAvgSleep(allSleep.length ? allSleep.reduce((a, b) => a + b, 0) / allSleep.length : 0);
       // --- Personalized Wellness Report ---
       // Calculate improvement in mood
       let moodChange = 0;
@@ -623,10 +647,36 @@ function Dashboard() {
                   <Sun color={darkMode ? '#f8ffae' : '#fff'} size={28} />
                   <Text style={[styles.actionBarLabel, darkMode && { color: '#f8ffae' }]}>Theme</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionBarItem}>
+                <TouchableOpacity style={styles.actionBarItem} onPress={handleBoost}>
                   <Sparkles color="#fff" size={28} />
                   <Text style={styles.actionBarLabel}>Boost</Text>
                 </TouchableOpacity>
+            {/* Confetti Animation Overlay */}
+            <ConfettiAnimation visible={showConfetti} />
+
+            {/* Boost Modal */}
+            <Modal
+              visible={boostModalVisible}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setBoostModalVisible(false)}
+            >
+              <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' }}>
+                <View style={{ backgroundColor: '#fff', borderRadius: 24, padding: 28, alignItems: 'center', maxWidth: 320, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12 }}>
+                  <LottieView
+                    source={require('../assets/lottie/badge.json')}
+                    autoPlay
+                    loop={false}
+                    style={{ width: 120, height: 120, marginBottom: 12 }}
+                  />
+                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#43e97b', textAlign: 'center', marginBottom: 10 }}>Boost Activated!</Text>
+                  <Text style={{ fontSize: 16, color: '#333', textAlign: 'center', marginBottom: 18 }}>{boostQuote}</Text>
+                  <TouchableOpacity onPress={() => setBoostModalVisible(false)} style={{ backgroundColor: '#43e97b', borderRadius: 16, paddingVertical: 8, paddingHorizontal: 24 }}>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>Close</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
               </LinearGradient>
             </View>
 
@@ -671,7 +721,7 @@ function Dashboard() {
                 <View style={styles.statIconContainer}>
                   <Text style={styles.statIcon}>📋</Text>
                 </View>
-                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>23</Text>
+                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>{typeof totalEntries === 'number' && !isNaN(totalEntries) ? totalEntries : 0}</Text>
                 <Text style={[styles.statUnit, darkMode && { color: '#f8ffae' }]}>logs</Text>
                 <Text style={[styles.statLabel, darkMode && { color: '#f8ffae' }]}>Total Entries</Text>
                 <View style={styles.cardDecor} />
@@ -687,7 +737,7 @@ function Dashboard() {
                 <View style={styles.statIconContainer}>
                   <Text style={styles.statIcon}>😊</Text>
                 </View>
-                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>4.2</Text>
+                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>{typeof avgMood === 'number' && !isNaN(avgMood) ? avgMood.toFixed(1) : '0.0'}</Text>
                 <Text style={[styles.statUnit, darkMode && { color: '#f8ffae' }]}>/5</Text>
                 <Text style={[styles.statLabel, darkMode && { color: '#f8ffae' }]}>Avg Mood</Text>
                 <View style={styles.cardDecor} />
@@ -703,7 +753,7 @@ function Dashboard() {
                 <View style={styles.statIconContainer}>
                   <Moon color="#fff" size={24} />
                 </View>
-                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>7.5</Text>
+                <Text style={[styles.statValue, darkMode && { color: '#f8ffae' }]}>{typeof avgSleep === 'number' && !isNaN(avgSleep) ? avgSleep.toFixed(1) : '0.0'}</Text>
                 <Text style={[styles.statUnit, darkMode && { color: '#f8ffae' }]}>hrs</Text>
                 <Text style={[styles.statLabel, darkMode && { color: '#f8ffae' }]}>Avg Sleep</Text>
                 <View style={styles.cardDecor} />

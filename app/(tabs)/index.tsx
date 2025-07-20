@@ -17,13 +17,57 @@ import { ChartCard } from '@/components/ChartCard';
 
 const screenWidth = Dimensions.get('window').width;
 
+
 export default function Dashboard() {
   const [userData, setUserData] = useState({
-    currentStreak: 7,
-    totalEntries: 23,
-    avgMood: 4.2,
-    avgSleep: 7.5,
+    currentStreak: 0,
+    totalEntries: 0,
+    avgMood: 0,
+    avgSleep: 0,
   });
+
+  // Simulate fetching logs and updating stats
+  useEffect(() => {
+    // TODO: Replace this mock with your real log fetching logic
+    // Example log structure: { date, mood, sleep }
+    const logs = [
+      { date: '2025-07-14', mood: 4, sleep: 7 },
+      { date: '2025-07-15', mood: 3, sleep: 6.5 },
+      { date: '2025-07-16', mood: 5, sleep: 8 },
+      { date: '2025-07-17', mood: 4, sleep: 7.5 },
+      { date: '2025-07-18', mood: 5, sleep: 6 },
+      { date: '2025-07-19', mood: 3, sleep: 8.5 },
+      { date: '2025-07-20', mood: 4, sleep: 7 },
+    ];
+
+    const totalEntries = logs.length;
+    const avgMood = logs.length > 0 ? (logs.reduce((sum, l) => sum + l.mood, 0) / logs.length) : 0;
+    const avgSleep = logs.length > 0 ? (logs.reduce((sum, l) => sum + l.sleep, 0) / logs.length) : 0;
+
+    // Calculate current streak (consecutive days with entries, ending today)
+    let streak = 0;
+    let day = new Date();
+    for (let i = logs.length - 1; i >= 0; i--) {
+      const logDate = new Date(logs[i].date);
+      if (
+        logDate.getFullYear() === day.getFullYear() &&
+        logDate.getMonth() === day.getMonth() &&
+        logDate.getDate() === day.getDate()
+      ) {
+        streak++;
+        day.setDate(day.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+
+    setUserData({
+      currentStreak: streak,
+      totalEntries,
+      avgMood: Number(avgMood.toFixed(1)),
+      avgSleep: Number(avgSleep.toFixed(1)),
+    });
+  }, []);
 
   const moodData = {
     labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -81,14 +125,14 @@ export default function Dashboard() {
         <View style={styles.statsContainer}>
           <StatCard
             title="Current Streak"
-            value={userData.currentStreak}
+            value={typeof userData.currentStreak === 'number' && !isNaN(userData.currentStreak) ? userData.currentStreak : 0}
             unit="days"
             icon={<Target size={24} color="#8B5CF6" />}
             gradient={['#8B5CF6', '#A855F7']}
           />
           <StatCard
             title="Total Entries"
-            value={userData.totalEntries}
+            value={typeof userData.totalEntries === 'number' && !isNaN(userData.totalEntries) ? userData.totalEntries : 0}
             unit="logs"
             icon={<BookOpen size={24} color="#EC4899" />}
             gradient={['#EC4899', '#F97316']}
@@ -98,26 +142,49 @@ export default function Dashboard() {
         <View style={styles.statsContainer}>
           <StatCard
             title="Avg Mood"
-            value={userData.avgMood}
+            value={typeof userData.avgMood === 'number' && !isNaN(userData.avgMood) ? userData.avgMood : 0}
             unit="/5"
             icon={<TrendingUp size={24} color="#14B8A6" />}
             gradient={['#14B8A6', '#10B981']}
           />
           <StatCard
             title="Avg Sleep"
-            value={userData.avgSleep}
+            value={typeof userData.avgSleep === 'number' && !isNaN(userData.avgSleep) ? userData.avgSleep : 0}
             unit="hrs"
             icon={<Moon size={24} color="#F59E0B" />}
             gradient={['#F59E0B', '#EAB308']}
           />
         </View>
 
+
+        {/*
+          If you see a React Hooks order warning, restart Metro with:
+          npx expo start -c
+          This clears cache and fixes stale hook order issues from hot reloads.
+        */}
         <ChartCard
           title="Mood Trends"
           subtitle="Last 7 days"
           icon={<TrendingUp size={20} color="#8B5CF6" />}>
           <LineChart
-            data={moodData}
+            data={{
+              labels: Array.isArray(moodData.labels) ? moodData.labels : [],
+              datasets:
+                Array.isArray(moodData.datasets) && moodData.datasets.length > 0 && moodData.datasets[0]
+                  ? [
+                      {
+                        ...moodData.datasets[0],
+                        data: Array.isArray(moodData.datasets[0].data) ? moodData.datasets[0].data : [],
+                      },
+                    ]
+                  : [
+                      {
+                        data: [],
+                        color: (opacity = 1) => `rgba(139, 92, 246, ${opacity})`,
+                        strokeWidth: 3,
+                      },
+                    ],
+            }}
             width={screenWidth - 80}
             height={200}
             chartConfig={chartConfig}
@@ -131,7 +198,24 @@ export default function Dashboard() {
           subtitle="Hours per night"
           icon={<Moon size={20} color="#14B8A6" />}>
           <LineChart
-            data={sleepData}
+            data={{
+              labels: Array.isArray(sleepData.labels) ? sleepData.labels : [],
+              datasets:
+                Array.isArray(sleepData.datasets) && sleepData.datasets.length > 0 && sleepData.datasets[0]
+                  ? [
+                      {
+                        ...sleepData.datasets[0],
+                        data: Array.isArray(sleepData.datasets[0].data) ? sleepData.datasets[0].data : [],
+                      },
+                    ]
+                  : [
+                      {
+                        data: [],
+                        color: (opacity = 1) => `rgba(20, 184, 166, ${opacity})`,
+                        strokeWidth: 3,
+                      },
+                    ],
+            }}
             width={screenWidth - 80}
             height={200}
             chartConfig={{
